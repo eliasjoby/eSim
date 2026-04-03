@@ -63,23 +63,32 @@ function createConfigFile
 
 function installNghdl
 {
-
     echo "Installing NGHDL..........................."
-    unzip -o nghdl.zip
-    cd nghdl/
-    chmod +x install-nghdl.sh
-
-    # Do not trap on error of any command. Let NGHDL script handle its own errors.
-    trap "" ERR
-
-    ./install-nghdl.sh --install       # Install NGHDL
-        
-    # Set trap again to error_exit function to exit on errors
-    trap error_exit ERR
-
-    ngspiceFlag=1
-    cd ../
-
+    # Check if zip file exists
+    if [ -f "nghdl.zip" ]; then
+        unzip -o nghdl.zip
+        # Check if directory was created
+        if [ -d "nghdl" ]; then
+            cd nghdl/
+            # Check if installer script exists
+            if [ -f "install-nghdl.sh" ]; then
+                chmod +x install-nghdl.sh
+                # Let NGHDL script handle its own errors
+                trap "" ERR
+                ./install-nghdl.sh --install
+                # Restore error trap
+                trap error_exit ERR
+                ngspiceFlag=1
+            else
+                echo "Warning: install-nghdl.sh not found, skipping NGHDL installation"
+            fi
+            cd ../
+        else
+            echo "Warning: nghdl directory not found after extraction"
+        fi
+    else
+        echo "Warning: nghdl.zip not found, skipping NGHDL installation"
+    fi
 }
 
 
@@ -169,8 +178,8 @@ function installKicad
     # Check if the PPA is already added
     if ! grep -q "^deb .*${kicadppa}" /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
         echo "Adding KiCad PPA to local apt repository: $kicadppa"
-        sudo add-apt-repository -y "ppa:$kicadppa"
-        sudo apt-get update
+        #sudo add-apt-repository -y "ppa:$kicadppa"
+        #sudo apt-get update
     else
         echo "KiCad PPA is already present in sources."
     fi
@@ -249,7 +258,7 @@ function installDependency
     pip3 install PyQt5  
 
     echo "Installing volare"
-    sudo apt-get xz-utils
+    sudo apt-get install xz-utils -y
     pip3 install volare
 }
 
@@ -258,8 +267,13 @@ function copyKicadLibrary
 {
 
     #Extract custom KiCad Library
-    tar -xJf library/kicadLibrary.tar.xz
-
+    #tar -xJf library/kicadLibrary.tar.xz
+    if [ -f "library/kicadLibrary.tar.xz" ]; then
+    	tar -xJf library/kicadLibrary.tar.xz
+    else
+    	echo "Warning: kicadLibrary.tar.xz not found, skipping extraction"	
+    fi
+    
     if [ -d ~/.config/kicad/6.0 ];then
         echo "kicad config folder already exists"
     else 
@@ -267,12 +281,28 @@ function copyKicadLibrary
         mkdir -p ~/.config/kicad/6.0
     fi
 
-    # Copy symbol table for eSim custom symbols 
-    cp kicadLibrary/template/sym-lib-table ~/.config/kicad/6.0/
-    echo "symbol table copied in the directory"
+    # Copy symbol table and KiCad symbols only if directory exists
+    if [ -d "kicadLibrary" ]; then
+    	mkdir -p ~/.config/kicad/6.0
+    if [ -f "kicadLibrary/template/sym-lib-table" ]; then
+        cp kicadLibrary/template/sym-lib-table ~/.config/kicad/6.0/
+        echo "symbol table copied in the directory"
+    else
+        echo "Skipping sym-lib-table: file not found"
+    fi
 
-    # Copy KiCad symbols made for eSim
-    sudo cp -r kicadLibrary/eSim-symbols/* /usr/share/kicad/symbols/
+    if [ -d "kicadLibrary/eSim-symbols" ]; then
+        sudo cp -r kicadLibrary/eSim-symbols/* /usr/share/kicad/symbols/
+    else
+        echo "Skipping symbol copy: directory not found"
+    fi
+
+    # Remove extracted KiCad Library
+    rm -rf kicadLibrary
+
+    else
+   	 echo "Warning: kicadLibrary directory not found, skipping KiCad library setup"
+    fi
 
     set +e      # Temporary disable exit on error
     trap "" ERR # Do not trap on error of any command
@@ -344,7 +374,11 @@ function createDesktopStartScript
     trap error_exit ERR
 
     # Copying logo.png to .esim directory to access as icon
-    cp -vp images/logo.png $config_dir
+    if [ -f "$SCRIPT_DIR/../../images/logo.png" ]; then
+    	cp -vp "$SCRIPT_DIR/../../images/logo.png" "$config_dir"
+    else
+    	echo "Warning: logo.png not found, skipping icon setup"
+    fi
 
 }
 
